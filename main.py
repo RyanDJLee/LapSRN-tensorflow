@@ -202,21 +202,21 @@ def test(file):
 
 ###====== Extract pre-trained Network's Weights to CSV ======###
 # TODO: make the trained file and format, and name of parameter parameters as well?
-def extract_params(params, file):
+# TODO: enforce order of image and output file?
+def extract_params(files, params):
     try:
-        img = get_imgs_fn(file[0])
+        img = get_imgs_fn(files[0])
     except IOError:
-        print('cannot open %s'%(file[0]))
+        print('cannot open %s'%(files[0]))
     try:
-        file = open(file[1], 'w')
+        file = open(files[1], 'w')
     except IOError:
-        print('cannot open %s'%(file[1]))
+        print('cannot open %s'%(files[1]))
     else:
         checkpoint_dir = config.model.checkpoint_path
         input_image = normalize_imgs_fn(img)
 
         size = input_image.shape
-        # print('Input size: %s,%s,%s'%(size[0],size[1],size[2]))
         t_image = tf.placeholder('float32', [None,size[0],size[1],size[2]], name='input_image')
         net_g, _, _, _ = LapSRN(t_image, is_train=False, reuse=False)
 
@@ -224,14 +224,11 @@ def extract_params(params, file):
         tl.layers.initialize_global_variables(sess)
         tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir+'/params_train.npz', network=net_g)
         # tf_vars = [v for v in tf.global_variables() if v.name == "LapSRN/Model_level/conv_D5/W_conv2d:0"][0]
-        # TODO: PARAMETERIZE param_name
-        param_name = 'LapSRN/Model_level/conv_D5/W_conv2d:0'
-        param_name1= 'LapSRN/Model_level/conv_D6/W_conv2d:0'
-        param_tf_vars = [v for v in tf.global_variables() if v.name == param_name][0]
-        param_tf_vars1= [v for v in tf.global_variables() if v.name == param_name][0]
-        param_values = sess.run([param_tf_vars])
-        param_values1= sess.run([param_tf_vars1])
-        checkpoint_dir = config.model.checkpoint_path
+        weights_dict = {}
+        for param in params:
+            # TODO: Optimize?
+            weights_dict[param] = sess.run([v for v in tf.global_variables() if v.name == params[0]][0])
+        print(weights_dict)
         print('\n\n\n')
         print('Extracting Parameter Values for: {param_name}'.format(param_name=param_name))
 
@@ -268,6 +265,7 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--mode', choices=['train','test', 'extract'], default='train', help='select mode')
     # TODO: Do len check for other methods
     parser.add_argument('-f', '--file', nargs='+', help='input file')
+    parser.add_argument('-p', '--parameters', nargs='+', help='input parameter name(s)')
 
     args = parser.parse_args()
     print(args.file)
@@ -281,6 +279,6 @@ if __name__ == '__main__':
         test(args.file)
     elif tl.global_flag['mode'] == 'extract':
         # TODO: Error handling
-        extract_params(args.file)
+        extract_params(args.file, args.parameters)
     else:
         raise Exception("Unknow --mode")
