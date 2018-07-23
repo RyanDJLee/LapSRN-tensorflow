@@ -5,6 +5,10 @@ import os, time, random
 import numpy as np
 import scipy
 import pprint as pp
+import copy
+import collections
+import networkx as nx
+import matplotlib.pyplot as plt
 
 import tensorflow as tf
 import tensorlayer as tl
@@ -202,7 +206,8 @@ def test(file):
 
 
 ###====== Extract pre-trained Network's Weights to CSV ======###
-def _extract_values(files, params):
+# TODO: Ahh..do not use an empty list as the default..
+def _extract_values(files, params=[]):
     """Return a dictionary of parameter names and values give a test image,
     output directory and parameter name(s).
     """
@@ -226,20 +231,23 @@ def _extract_values(files, params):
         tl.layers.initialize_global_variables(sess)
         # TODO: Parameterize although name should be an invariant given this training model?
         tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir+'/params_train.npz', network=net_g)
+        # Grab all parameter values.
+        if len(params) == 0:
+            params = [v.name for v in tf.global_variables()]
         values_dict = {}
         for param in params:
             # TODO: Optimize?
             values_dict[param] = sess.run([v for v in tf.global_variables() if v.name == params[0]][0])
-    return values_dict
+        return values_dict
 
-# TODO: make the trained file and format, and name of parameter parameters as well?
+
 # TODO: enforce order of image and output file?
 def extract_params(files, params):
     # TODO: Just save?
     """Display and save a values dictionary of specified parameter(s) given a test image,
     output directory and parameter names.
     """
-    values_dict = _extract_values(files, params)
+    values_dict = _extract_values(files, params=params)
     print(values_dict)
     print('\n\n\n')
     print('Extracting Parameter Values for: {params}'.format(params=params))
@@ -249,18 +257,43 @@ def extract_params(files, params):
     file.close()
 
 
+def _flatten_values(tensor_values):
+    """Return flattened list of values given tensor's values.
+    """
+    if isinstance(tensor_values, collections.Iterable):
+        return [a for b in tensor_values for a in _flatten_values(b)]
+    else:
+        return [tensor_values]
+
 def analyze_layers(img, output_dir):
     """Display parameter sharing between layers and save ouput to specified output directory.
     """
-    print(tf.global_variables())
-    # values_dict = _extract_values(files, tf.)
-    # print('\n\n\n')
-    # print('Extracting Parameter Values for: {params}'.format(params=params))
-    # pp.pprint(values_dict)
-    #
-    # file = open(files[1], 'w')
-    # file.write(str(values_dict))
-    # file.close()
+    # TODO: Could be/should be doing this work in _extract. Rethink design and refactor?
+    values_dict = _extract_values([img, output_dir])
+    weight_keys = [key for key in values_dict.keys() if key[key.rfind('/') + 1] == 'W' ]
+    # TODO: Save memory or computation?
+    # flattened_dict = copy.deepcopy(values_dict)
+    flattened_dict = {}
+    for k in weight_keys:
+        flattened_dict[k] = _flatten_values(values_dict[k])
+    # print(flattened_dict['LapSRN/Model_level/conv_D6/W_conv2d:0'])
+    # print(flattened_dict['LapSRN/Model_level/conv_D5/W_conv2d:0'])
+    a = flattened_dict['LapSRN/Model_level/conv_D6/W_conv2d:0'] == flattened_dict['LapSRN/Model_level/conv_D5/W_conv2d:0']
+    # TODO: Use graph for scalability?
+    layer_graph = nx.Graph()
+    layer_graph.add_nodes_from(weight_keys)
+    for w1 in weight_keys:
+        for w2 in weight_keys:
+            if flattened_dict[w1] == flattened_dict[w2] and ((w2, w1) not in list(layer_graph.edges)) and w1 != w2:
+                layer_graph.add_edge(w1, w2)
+    # print(nx.draw(layer_graph, with_labels=True, font_weight='bold'))
+    # When displaying, print
+    # Have a helper compare nested lists
+    # Don't forget to display the size of each layer
+    # once we have the filtered list, what data structure should we use to generate the relationships
+    # between the layers?
+    # Our Data Structure needs to do: Point to it's value. Point to it's name. Point to other layers.
+    # DAG!
 
 
 if __name__ == '__main__':
@@ -281,6 +314,7 @@ if __name__ == '__main__':
         if (args.file is None):
             raise Exception("Please enter input file name for test mode")
         test(args.file)
+    # TODO: Shouldn't the network be the same regardless of test image?
     elif tl.global_flag['mode'] == 'extract':
         # TODO: Error handling
         extract_params(args.file, args.parameters)
