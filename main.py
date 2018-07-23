@@ -204,6 +204,10 @@ def test(file):
 # TODO: make the trained file and format, and name of parameter parameters as well?
 # TODO: enforce order of image and output file?
 def extract_params(files, params):
+    # TODO: Just save?
+    """Display and save a values dictionary of specified parameter(s) given a test image,
+    output directory and parameter names.
+    """
     try:
         img = get_imgs_fn(files[0])
     except IOError:
@@ -222,41 +226,19 @@ def extract_params(files, params):
 
         sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
         tl.layers.initialize_global_variables(sess)
+        # TODO: Parameterize although name should be an invariant given this training model?
         tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir+'/params_train.npz', network=net_g)
-        # tf_vars = [v for v in tf.global_variables() if v.name == "LapSRN/Model_level/conv_D5/W_conv2d:0"][0]
-        weights_dict = {}
+        values_dict = {}
         for param in params:
             # TODO: Optimize?
-            weights_dict[param] = sess.run([v for v in tf.global_variables() if v.name == params[0]][0])
-        print(weights_dict)
+            values_dict[param] = sess.run([v for v in tf.global_variables() if v.name == params[0]][0])
+        print(values_dict)
         print('\n\n\n')
-        print('Extracting Parameter Values for: {param_name}'.format(param_name=param_name))
+        print('Extracting Parameter Values for: {params}'.format(params=params))
 
-        l1 = []
-        l2 = []
-
-        for in_ch in range(np.shape(param_values[0])[2]):
-            for out_ch in range(np.shape(param_values[0])[3]):
-                for h in range(np.shape(param_values[0])[0]):
-                    for w in range(np.shape(param_values[0])[1]):
-                        l1.append(param_values[0][h][w][in_ch][out_ch])
-
-        for in_ch in range(np.shape(param_values1[0])[2]):
-            for out_ch in range(np.shape(param_values1[0])[3]):
-                for h in range(np.shape(param_values1[0])[0]):
-                    for w in range(np.shape(param_values1[0])[1]):
-                        l2.append(param_values1[0][h][w][in_ch][out_ch])
-        print(l1 == l2)
-        # file = open(checkpoint_dir + rel_path, 'w')
-        # file = open(checkpoint_dir + '/params.csv', 'w')
-        # input_list = param_values
-        # for in_ch in range(np.shape(input_list[0])[2]):
-        #     for out_ch in range(np.shape(input_list[0])[3]):
-        #         for h in range(np.shape(input_list[0])[0]):
-        #             for w in range(np.shape(input_list[0])[1]):
-        #                 file.write(str(input_list[0][h][w][in_ch][out_ch])) # h w in_ch, out_ch
-        #                 filk.write("\n")
-        # file.close()
+        file = open(files[1], 'w')
+        file.write(str(values_dict))
+        file.close()
 
 
 if __name__ == '__main__':
