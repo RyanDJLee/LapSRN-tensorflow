@@ -69,14 +69,14 @@ def prepare_nn_data(hr_img_list, lr_img_list, idx_img=None):
 
     for idx in range(batch_size):
         in_row_ind   = random.randint(0,input_image.shape[0]-patch_size)
-        in_col_ind   = random.randint(0,input_image.shape[1]-patch_size)    
+        in_col_ind   = random.randint(0,input_image.shape[1]-patch_size)
 
         input_cropped = augment_imgs_fn(input_image[in_row_ind:in_row_ind+patch_size,
                                                 in_col_ind:in_col_ind+patch_size])
         input_cropped = normalize_imgs_fn(input_cropped)
         input_cropped = np.expand_dims(input_cropped,axis=0)
         input_batch[idx] = input_cropped
-    
+
         out_row_ind    = in_row_ind * scale
         out_col_ind    = in_col_ind * scale
         output_cropped = output_image[out_row_ind:out_row_ind+out_patch_size,
@@ -98,7 +98,7 @@ def train():
     ###========================== DEFINE MODEL ============================###
     t_image = tf.placeholder('float32', [batch_size, patch_size, patch_size, 3], name='t_image_input')
     t_target_image = tf.placeholder('float32', [batch_size, patch_size*config.model.scale, patch_size*config.model.scale, 3], name='t_target_image')
-    t_target_image_down = tf.image.resize_images(t_target_image, size=[patch_size*2, patch_size*2], method=0, align_corners=False) 
+    t_target_image_down = tf.image.resize_images(t_target_image, size=[patch_size*2, patch_size*2], method=0, align_corners=False)
 
     net_image2, net_grad2, net_image1, net_grad1 = LapSRN(t_image, is_train=True, reuse=False)
     net_image2.print_params(False)
@@ -111,20 +111,20 @@ def train():
     loss1   = compute_charbonnier_loss(net_image1.outputs, t_target_image_down, is_mean=True)
     g_loss  = loss1 + loss2 * 4
     g_vars  = tl.layers.get_variables_with_name('LapSRN', True, True)
-    
+
     with tf.variable_scope('learning_rate'):
         lr_v = tf.Variable(config.train.lr_init, trainable=False)
 
     g_optim = tf.train.AdamOptimizer(lr_v, beta1=config.train.beta1).minimize(g_loss, var_list=g_vars)
-    
+
     ###========================== RESTORE MODEL =============================###
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
     tl.layers.initialize_global_variables(sess)
     tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir+'/params_{}.npz'.format(tl.global_flag['mode']), network=net_image2)
- 
+
     ###========================== PRE-LOAD DATA ===========================###
     train_hr_list,train_lr_list,valid_hr_list,valid_lr_list = load_file_list()
- 
+
     ###========================== INTERMEDIATE RESULT ===============================###
     sample_ind = 37
     sample_input_imgs,sample_output_imgs = prepare_nn_data(valid_hr_list,valid_lr_list,sample_ind)
@@ -154,18 +154,18 @@ def train():
             errM, _ = sess.run([g_loss, g_optim], {t_image: batch_input_imgs, t_target_image: batch_output_imgs})
             total_g_loss += errM
             n_iter += 1
-        
+
         print("[*] Epoch: [%2d/%2d] time: %4.4fs, loss: %.8f" % (epoch, config.train.n_epoch, time.time() - epoch_time, total_g_loss/n_iter))
 
         ## save model and evaluation on sample set
         if (epoch >= 0):
             tl.files.save_npz(net_image2.all_params,  name=checkpoint_dir+'/params_{}.npz'.format(tl.global_flag['mode']), sess=sess)
-            
+            saver = tf.trainer.Saver(tf.all_variables())
+
             if config.train.dump_intermediate_result is True:
                 sample_out, sample_grad_out = sess.run([net_image_test.outputs,net_grad_test.outputs], {t_image: sample_input_imgs})#; print('gen sub-image:', out.shape, out.min(), out.max())
                 tl.vis.save_images(truncate_imgs_fn(sample_out), [ni, ni], save_dir+'/train_predict_%d.png' % epoch)
                 tl.vis.save_images(truncate_imgs_fn(np.abs(sample_grad_out)), [ni, ni], save_dir+'/train_grad_predict_%d.png' % epoch)
-            
 
 
 def test(file):
@@ -192,20 +192,85 @@ def test(file):
         start_time = time.time()
         out = sess.run(net_g.outputs, {t_image: [input_image]})
         print("took: %4.4fs" % (time.time() - start_time))
-    
+
+
+
         tl.files.exists_or_mkdir(save_dir)
         tl.vis.save_image(truncate_imgs_fn(out[0,:,:,:]), save_dir+'/test_out.png')
         tl.vis.save_image(input_image, save_dir+'/test_input.png')
 
 
+###====== Extract pre-trained Network's Weights to CSV ======###
+# TODO: make the trained file and format, and name of parameter parameters as well?
+def extract_params(params, file):
+    try:
+        img = get_imgs_fn(file[0])
+    except IOError:
+        print('cannot open %s'%(file[0]))
+    try:
+        file = open(file[1], 'w')
+    except IOError:
+        print('cannot open %s'%(file[1]))
+    else:
+        checkpoint_dir = config.model.checkpoint_path
+        input_image = normalize_imgs_fn(img)
+
+        size = input_image.shape
+        # print('Input size: %s,%s,%s'%(size[0],size[1],size[2]))
+        t_image = tf.placeholder('float32', [None,size[0],size[1],size[2]], name='input_image')
+        net_g, _, _, _ = LapSRN(t_image, is_train=False, reuse=False)
+
+        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
+        tl.layers.initialize_global_variables(sess)
+        tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir+'/params_train.npz', network=net_g)
+        # tf_vars = [v for v in tf.global_variables() if v.name == "LapSRN/Model_level/conv_D5/W_conv2d:0"][0]
+        # TODO: PARAMETERIZE param_name
+        param_name = 'LapSRN/Model_level/conv_D5/W_conv2d:0'
+        param_name1= 'LapSRN/Model_level/conv_D6/W_conv2d:0'
+        param_tf_vars = [v for v in tf.global_variables() if v.name == param_name][0]
+        param_tf_vars1= [v for v in tf.global_variables() if v.name == param_name][0]
+        param_values = sess.run([param_tf_vars])
+        param_values1= sess.run([param_tf_vars1])
+        checkpoint_dir = config.model.checkpoint_path
+        print('\n\n\n')
+        print('Extracting Parameter Values for: {param_name}'.format(param_name=param_name))
+
+        l1 = []
+        l2 = []
+
+        for in_ch in range(np.shape(param_values[0])[2]):
+            for out_ch in range(np.shape(param_values[0])[3]):
+                for h in range(np.shape(param_values[0])[0]):
+                    for w in range(np.shape(param_values[0])[1]):
+                        l1.append(param_values[0][h][w][in_ch][out_ch])
+
+        for in_ch in range(np.shape(param_values1[0])[2]):
+            for out_ch in range(np.shape(param_values1[0])[3]):
+                for h in range(np.shape(param_values1[0])[0]):
+                    for w in range(np.shape(param_values1[0])[1]):
+                        l2.append(param_values1[0][h][w][in_ch][out_ch])
+        print(l1 == l2)
+        # file = open(checkpoint_dir + rel_path, 'w')
+        # file = open(checkpoint_dir + '/params.csv', 'w')
+        # input_list = param_values
+        # for in_ch in range(np.shape(input_list[0])[2]):
+        #     for out_ch in range(np.shape(input_list[0])[3]):
+        #         for h in range(np.shape(input_list[0])[0]):
+        #             for w in range(np.shape(input_list[0])[1]):
+        #                 file.write(str(input_list[0][h][w][in_ch][out_ch])) # h w in_ch, out_ch
+        #                 filk.write("\n")
+        # file.close()
+
 
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('-m', '--mode', choices=['train','test'], default='train', help='select mode')
-    parser.add_argument('-f','--file', help='input file')
-    
+    parser.add_argument('-m', '--mode', choices=['train','test', 'extract'], default='train', help='select mode')
+    # TODO: Do len check for other methods
+    parser.add_argument('-f', '--file', nargs='+', help='input file')
+
     args = parser.parse_args()
+    print(args.file)
 
     tl.global_flag['mode'] = args.mode
     if tl.global_flag['mode'] == 'train':
@@ -214,5 +279,8 @@ if __name__ == '__main__':
         if (args.file is None):
             raise Exception("Please enter input file name for test mode")
         test(args.file)
+    elif tl.global_flag['mode'] == 'extract':
+        # TODO: Error handling
+        extract_params(args.file)
     else:
         raise Exception("Unknow --mode")
