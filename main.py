@@ -252,36 +252,15 @@ def extract_params(files, params):
 def analyze_layers(img, output_dir):
     """Display parameter sharing between layers and save ouput to specified output directory.
     """
-    try:
-        img = get_imgs_fn(img)
-    except IOError:
-        print('cannot open %s'%(img))
-    try:
-        file = open(output_dir, 'w')
-    except IOError:
-        print('cannot open %s'%(output_dir))
-    else:
-        checkpoint_dir = config.model.checkpoint_path
-        input_image = normalize_imgs_fn(img)
-
-        size = input_image.shape
-        t_image = tf.placeholder('float32', [None,size[0],size[1],size[2]], name='input_image')
-        net_g, _, _, _ = LapSRN(t_image, is_train=False, reuse=False)
-
-        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
-        tl.layers.initialize_global_variables(sess)
-        tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir+'/params_train.npz', network=net_g)
-        values_dict = {}
-        for param in params:
-            # TODO: Optimize?
-            values_dict[param] = sess.run([v for v in tf.global_variables() if v.name == params[0]][0])
-        print('\n\n\n')
-        print('Extracting Parameter Values for: {params}'.format(params=params))
-        pp.pprint(values_dict)
-
-        file = open(files[1], 'w')
-        file.write(str(values_dict))
-        file.close()
+    print(tf.global_variables())
+    # values_dict = _extract_values(files, tf.)
+    # print('\n\n\n')
+    # print('Extracting Parameter Values for: {params}'.format(params=params))
+    # pp.pprint(values_dict)
+    #
+    # file = open(files[1], 'w')
+    # file.write(str(values_dict))
+    # file.close()
 
 
 if __name__ == '__main__':
@@ -294,7 +273,6 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--parameters', nargs='+', help='input parameter name(s)')
 
     args = parser.parse_args()
-    print(args.file)
 
     tl.global_flag['mode'] = args.mode
     if tl.global_flag['mode'] == 'train':
