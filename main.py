@@ -4,6 +4,7 @@
 import os, time, random
 import numpy as np
 import scipy
+import pprint as pp
 
 import tensorflow as tf
 import tensorlayer as tl
@@ -201,12 +202,9 @@ def test(file):
 
 
 ###====== Extract pre-trained Network's Weights to CSV ======###
-# TODO: make the trained file and format, and name of parameter parameters as well?
-# TODO: enforce order of image and output file?
-def extract_params(files, params):
-    # TODO: Just save?
-    """Display and save a values dictionary of specified parameter(s) given a test image,
-    output directory and parameter names.
+def _extract_values(files, params):
+    """Return a dictionary of parameter names and values give a test image,
+    output directory and parameter name(s).
     """
     try:
         img = get_imgs_fn(files[0])
@@ -232,9 +230,54 @@ def extract_params(files, params):
         for param in params:
             # TODO: Optimize?
             values_dict[param] = sess.run([v for v in tf.global_variables() if v.name == params[0]][0])
-        print(values_dict)
+    return values_dict
+
+# TODO: make the trained file and format, and name of parameter parameters as well?
+# TODO: enforce order of image and output file?
+def extract_params(files, params):
+    # TODO: Just save?
+    """Display and save a values dictionary of specified parameter(s) given a test image,
+    output directory and parameter names.
+    """
+    values_dict = _extract_values(files, params)
+    print(values_dict)
+    print('\n\n\n')
+    print('Extracting Parameter Values for: {params}'.format(params=params))
+
+    file = open(files[1], 'w')
+    file.write(str(values_dict))
+    file.close()
+
+
+def analyze_layers(img, output_dir):
+    """Display parameter sharing between layers and save ouput to specified output directory.
+    """
+    try:
+        img = get_imgs_fn(img)
+    except IOError:
+        print('cannot open %s'%(img))
+    try:
+        file = open(output_dir, 'w')
+    except IOError:
+        print('cannot open %s'%(output_dir))
+    else:
+        checkpoint_dir = config.model.checkpoint_path
+        input_image = normalize_imgs_fn(img)
+
+        size = input_image.shape
+        t_image = tf.placeholder('float32', [None,size[0],size[1],size[2]], name='input_image')
+        net_g, _, _, _ = LapSRN(t_image, is_train=False, reuse=False)
+
+        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
+        tl.layers.initialize_global_variables(sess)
+        tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir+'/params_train.npz', network=net_g)
+        values_dict = {}
+        for param in params:
+            # TODO: Optimize?
+            values_dict[param] = sess.run([v for v in tf.global_variables() if v.name == params[0]][0])
         print('\n\n\n')
         print('Extracting Parameter Values for: {params}'.format(params=params))
+        pp.pprint(values_dict)
 
         file = open(files[1], 'w')
         file.write(str(values_dict))
@@ -244,7 +287,8 @@ def extract_params(files, params):
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('-m', '--mode', choices=['train','test', 'extract'], default='train', help='select mode')
+    parser.add_argument('-m', '--mode', choices=['train','test', 'extract', 'analyze'],
+                        default='train', help='select mode')
     # TODO: Do len check for other methods
     parser.add_argument('-f', '--file', nargs='+', help='input file')
     parser.add_argument('-p', '--parameters', nargs='+', help='input parameter name(s)')
@@ -262,5 +306,8 @@ if __name__ == '__main__':
     elif tl.global_flag['mode'] == 'extract':
         # TODO: Error handling
         extract_params(args.file, args.parameters)
+    elif tl.global_flag['mode'] == 'analyze':
+        # TODO: Error handling
+        analyze_layers(args.file[0], args.file[1])
     else:
         raise Exception("Unknow --mode")
