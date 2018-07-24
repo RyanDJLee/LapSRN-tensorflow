@@ -274,25 +274,59 @@ def _get_shape(weights):
 
 
 def analyze_layers(img, output_dir):
-    """Display parameter sharing between layers as a graph and save ouput
-    to specified output directory.
+    """Display parameter sharing between layers and save ouput to specified output directory.
     """
     # TODO: Could be/should be doing this work in _extract. Rethink design and refactor?
     values_dict = _extract_values(img)
-    weight_keys = [key for key in values_dict.keys() if key[key.rfind('/') + 1] == 'W' ]
+    weight_keys = [key for key in values_dict.keys() if key[key.rfind('/') + 1] == 'W']
     # TODO: Save memory or computation?
+    # flattened_dict = copy.deepcopy(values_dict)
     flattened_dict = {}
     for k in weight_keys:
         flattened_dict[k] = _flatten_values(values_dict[k])
-    layer_graph = nx.Graph()
-    layer_graph.add_nodes_from(weight_keys)
+
+    i = 1
+    colour = {k : '' for k in weight_keys}
+    shape = _get_shape(list(values_dict.values())[0])
     for w1 in weight_keys:
         for w2 in weight_keys:
-            if flattened_dict[w1] == flattened_dict[w2] and ((w2, w1) not in list(layer_graph.edges)) and w1 != w2:
-                layer_graph.add_edge(w1, w2)
-    nx.draw(layer_graph, with_labels=True, font_weight='bold')
-    plt.savefig(output_dir + '/shared_parameter_graph.png', dpi=500, format="PNG")
-    plt.show()
+            if flattened_dict[w1] == flattened_dict[w2] and w1 != w2:
+                if colour[w1] == '' and colour[w2] == '':
+                    colour[w1] = '\x1b[6;3' + str(i) + '0;42m'
+                    i += 1
+                elif colour[w2] != '':
+                    colour[w1] = colour[w2]
+                else:
+                    colour[w2] = colour[w1]
+    for w in weight_keys:
+        if colour[w] == '':
+            print(w + '\t' + shape + '\n')
+        else:
+            print(colour[w] + w + '\x1b[0m' + '\t' + '\n')
+
+    print('\x1b[6;30;42m' + 'Success!' + '\x1b[0m')
+
+
+# def analyze_layers(img, output_dir):
+#     """Display parameter sharing between layers as a graph and save ouput
+#     to specified output directory.
+#     """
+#     # TODO: Could be/should be doing this work in _extract. Rethink design and refactor?
+#     values_dict = _extract_values(img)
+#     weight_keys = [key for key in values_dict.keys() if key[key.rfind('/') + 1] == 'W' ]
+#     # TODO: Save memory or computation?
+#     flattened_dict = {}
+#     for k in weight_keys:
+#         flattened_dict[k] = _flatten_values(values_dict[k])
+#     layer_graph = nx.Graph()
+#     layer_graph.add_nodes_from(weight_keys)
+#     for w1 in weight_keys:
+#         for w2 in weight_keys:
+#             if flattened_dict[w1] == flattened_dict[w2] and ((w2, w1) not in list(layer_graph.edges)) and w1 != w2:
+#                 layer_graph.add_edge(w1, w2)
+#     nx.draw(layer_graph, with_labels=True, font_weight='bold')
+#     plt.savefig(output_dir + '/shared_parameter_graph.png', dpi=500, format="PNG")
+#     plt.show()
 
 
 if __name__ == '__main__':
