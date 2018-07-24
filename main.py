@@ -273,7 +273,7 @@ def _get_shape(weights):
     return shape[:-1]
 
 
-def analyze_layers(img, output_dir):
+def analyze_layers(img, output_dir, mode):
     """Display parameter sharing between layers and save ouput to specified output directory.
     """
     # TODO: Could be/should be doing this work in _extract. Rethink design and refactor?
@@ -285,24 +285,37 @@ def analyze_layers(img, output_dir):
     for k in weight_keys:
         flattened_dict[k] = _flatten_values(values_dict[k])
 
-    i = 1
-    colour = {k : '' for k in weight_keys}
-    shape = _get_shape(list(values_dict.values())[0])
-    for w1 in weight_keys:
-        for w2 in weight_keys:
-            if flattened_dict[w1] == flattened_dict[w2] and w1 != w2:
-                if colour[w1] == '' and colour[w2] == '':
-                    colour[w1] = '\x1b[6;3' + str(i) + '0;42m'
-                    i += 1
-                elif colour[w2] != '':
-                    colour[w1] = colour[w2]
-                else:
-                    colour[w2] = colour[w1]
-    for w in weight_keys:
-        if colour[w] == '':
-            print(w + '\t' + shape + '\n')
-        else:
-            print(colour[w] + w + '\x1b[0m' + '\t' + '\n')
+    if mode == 'text':
+        i = 1
+        colour = {k : '' for k in weight_keys}
+        shape = _get_shape(list(values_dict.values())[0])
+        for w1 in weight_keys:
+            for w2 in weight_keys:
+                if flattened_dict[w1] == flattened_dict[w2] and w1 != w2:
+                    if colour[w1] == '' and colour[w2] == '':
+                        colour[w1] = '\x1b[6;3' + str(i) + '0;42m'
+                        i += 1
+                    elif colour[w2] != '':
+                        colour[w1] = colour[w2]
+                    else:
+                        colour[w2] = colour[w1]
+        for w in weight_keys:
+            if colour[w] == '':
+                print(w + '\t' + shape + '\n')
+            else:
+                print(colour[w] + w + '\x1b[0m' + '\t' + '\n')
+    else:
+        for k in weight_keys:
+            flattened_dict[k] = _flatten_values(values_dict[k])
+        layer_graph = nx.Graph()
+        layer_graph.add_nodes_from(weight_keys)
+        for w1 in weight_keys:
+            for w2 in weight_keys:
+                if flattened_dict[w1] == flattened_dict[w2] and ((w2, w1) not in list(layer_graph.edges)) and w1 != w2:
+                    layer_graph.add_edge(w1, w2)
+        nx.draw(layer_graph, with_labels=True, font_weight='bold')
+        plt.savefig(output_dir + '/shared_parameter_graph.png', dpi=500, format="PNG")
+        plt.show()
 
     print('\x1b[6;30;42m' + 'Success!' + '\x1b[0m')
 
@@ -337,6 +350,7 @@ if __name__ == '__main__':
     # TODO: Do len check for other methods
     parser.add_argument('-f', '--file', nargs='+', help='input file')
     parser.add_argument('-p', '--parameters', nargs='+', help='input parameter name(s)')
+    parser.add_argument('-o', '--output', choices=['text', 'graph'], help='input desired output format')
 
     args = parser.parse_args()
 
@@ -353,6 +367,6 @@ if __name__ == '__main__':
         extract_params(args.file[0], args.file[1], args.parameters)
     elif tl.global_flag['mode'] == 'analyze':
         # TODO: Error handling
-        analyze_layers(args.file[0], args.file[1])
+        analyze_layers(args.file[0], args.file[1], args.output)
     else:
         raise Exception("Unknow --mode")
