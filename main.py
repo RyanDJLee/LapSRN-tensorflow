@@ -9,7 +9,6 @@ import copy
 import collections
 import networkx as nx
 import matplotlib.pyplot as plt
-from disjoint_sets import *
 
 import tensorflow as tf
 import tensorlayer as tl
