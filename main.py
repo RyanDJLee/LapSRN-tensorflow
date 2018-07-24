@@ -9,6 +9,7 @@ import copy
 import collections
 import networkx as nx
 import matplotlib.pyplot as plt
+from disjoint_sets import *
 
 import tensorflow as tf
 import tensorlayer as tl
@@ -207,18 +208,14 @@ def test(file):
 
 ###====== Extract pre-trained Network's Weights to CSV ======###
 # TODO: Ahh..do not use an empty list as the default..
-def _extract_values(files, params=[]):
+def _extract_values(img, params=[]):
     """Return a dictionary of parameter names and values give a test image,
     output directory and parameter name(s).
     """
     try:
-        img = get_imgs_fn(files[0])
+        img = get_imgs_fn(img)
     except IOError:
-        print('cannot open %s'%(files[0]))
-    try:
-        file = open(files[1], 'w')
-    except IOError:
-        print('cannot open %s'%(files[1]))
+        print('cannot open %s'%(img))
     else:
         checkpoint_dir = config.model.checkpoint_path
         input_image = normalize_imgs_fn(img)
@@ -242,17 +239,17 @@ def _extract_values(files, params=[]):
 
 
 # TODO: enforce order of image and output file?
-def extract_params(files, params):
+def extract_params(img, output_dir, params):
     # TODO: Just save?
     """Display and save a values dictionary of specified parameter(s) given a test image,
     output directory and parameter names.
     """
-    values_dict = _extract_values(files, params=params)
+    values_dict = _extract_values(img, params=params)
     print(values_dict)
     print('\n\n\n')
     print('Extracting Parameter Values for: {params}'.format(params=params))
 
-    file = open(files[1], 'w')
+    file = open(output_dir, 'w')
     file.write(str(values_dict))
     file.close()
 
@@ -265,35 +262,37 @@ def _flatten_values(tensor_values):
     else:
         return [tensor_values]
 
+
+def _get_shape(weights):
+    shape = []
+    if isinstance(weights, collections.Iterable):
+        shape.append(len(weights))
+        shape.extend(_get_shape(weights[0]))
+    else:
+        shape.append(-1)
+    return shape[:-1]
+
+
 def analyze_layers(img, output_dir):
-    """Display parameter sharing between layers and save ouput to specified output directory.
+    """Display parameter sharing between layers as a graph and save ouput
+    to specified output directory.
     """
     # TODO: Could be/should be doing this work in _extract. Rethink design and refactor?
-    values_dict = _extract_values([img, output_dir])
+    values_dict = _extract_values(img)
     weight_keys = [key for key in values_dict.keys() if key[key.rfind('/') + 1] == 'W' ]
     # TODO: Save memory or computation?
-    # flattened_dict = copy.deepcopy(values_dict)
     flattened_dict = {}
     for k in weight_keys:
         flattened_dict[k] = _flatten_values(values_dict[k])
-    # print(flattened_dict['LapSRN/Model_level/conv_D6/W_conv2d:0'])
-    # print(flattened_dict['LapSRN/Model_level/conv_D5/W_conv2d:0'])
-    a = flattened_dict['LapSRN/Model_level/conv_D6/W_conv2d:0'] == flattened_dict['LapSRN/Model_level/conv_D5/W_conv2d:0']
-    # TODO: Use graph for scalability?
     layer_graph = nx.Graph()
     layer_graph.add_nodes_from(weight_keys)
     for w1 in weight_keys:
         for w2 in weight_keys:
             if flattened_dict[w1] == flattened_dict[w2] and ((w2, w1) not in list(layer_graph.edges)) and w1 != w2:
                 layer_graph.add_edge(w1, w2)
-    # print(nx.draw(layer_graph, with_labels=True, font_weight='bold'))
-    # When displaying, print
-    # Have a helper compare nested lists
-    # Don't forget to display the size of each layer
-    # once we have the filtered list, what data structure should we use to generate the relationships
-    # between the layers?
-    # Our Data Structure needs to do: Point to it's value. Point to it's name. Point to other layers.
-    # DAG!
+    nx.draw(layer_graph, with_labels=True, font_weight='bold')
+    plt.savefig(output_dir + '/shared_parameter_graph.png', dpi=500, format="PNG")
+    plt.show()
 
 
 if __name__ == '__main__':
@@ -317,7 +316,7 @@ if __name__ == '__main__':
     # TODO: Shouldn't the network be the same regardless of test image?
     elif tl.global_flag['mode'] == 'extract':
         # TODO: Error handling
-        extract_params(args.file, args.parameters)
+        extract_params(args.file[0], args.file[1], args.parameters)
     elif tl.global_flag['mode'] == 'analyze':
         # TODO: Error handling
         analyze_layers(args.file[0], args.file[1])
