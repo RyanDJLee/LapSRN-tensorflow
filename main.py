@@ -228,12 +228,24 @@ def _extract_values(img, params=[]):
         # TODO: Parameterize although name should be an invariant given this training model?
         tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir+'/params_train.npz', network=net_g)
         # Grab all parameter values.
+        param_tensors = []
         if len(params) == 0:
-            params = [v.name for v in tf.global_variables()]
+            param_tensors = [v for v in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)]
+        else:
+            tfs_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+            for param in params:
+                # Find the tf variable
+                param_tensors.append(tfs_vars[[v.name for v in tfs_vars].index(param)])
+
         values_dict = collections.OrderedDict()
-        for param in params:
+
+        for param_t in param_tensors:
             # TODO: Optimize?
-            values_dict[param] = sess.run([v for v in tf.global_variables() if v.name == params[0]][0])
+            # values_dict[param] = sess.run([v for v in tf.global_variables() if v.name == params[0]][0])
+            values_dict[param_t.name] = sess.run(param_t)[0]
+        # For debugging colouring
+        values_dict['LapSRN/init_conv/W_conv2d:0'] = values_dict['LapSRN/Model_level/conv_D0/W_conv2d:0']
+        values_dict['LapSRN/Model_level/conv_D9/W_conv2d:0'] = values_dict['LapSRN/Model_level/conv_D8/W_conv2d:0']
         return values_dict
 
 
@@ -294,17 +306,16 @@ def analyze_layers(img, output_dir, mode):
             for w2 in weight_keys:
                 if flattened_dict[w1] == flattened_dict[w2] and w1 != w2:
                     if colour[w1] == '' and colour[w2] == '':
-                        colour[w1] = '\x1b[6;3' + str(i) + '0;42m'
-                        i += 1
+                        colour[w1] = '\x1b[6;3' + str(i) + ';42m'
+                        i += 2
                     elif colour[w2] != '':
                         colour[w1] = colour[w2]
                     else:
                         colour[w2] = colour[w1]
-        print(weight_keys)
         output = ''
         for w in weight_keys:
             if colour[w] == '':
-                output += w + '\t' + shape + '\n'
+                output += w + '\t' + shape.__repr__() + '\n'
             else:
                 output += colour[w] + w + '\x1b[0m' + '\t' + shape.__repr__() + '\n'
         print(output)
@@ -322,7 +333,6 @@ def analyze_layers(img, output_dir, mode):
         plt.show()
 
     print('\x1b[6;30;42m' + 'Success!' + '\x1b[0m')
-    print('\n'.join([v.name for v in tf.global_variables()]))
 
 
 if __name__ == '__main__':
