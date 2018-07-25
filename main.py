@@ -269,7 +269,8 @@ def _get_shape(weights):
         shape.extend(_get_shape(weights[0]))
     else:
         shape.append(-1)
-    return shape[:-1]
+    x = copy.deepcopy(shape)
+    return x
 
 
 def analyze_layers(img, output_dir, mode):
@@ -287,7 +288,8 @@ def analyze_layers(img, output_dir, mode):
     if mode == 'text':
         i = 1
         colour = {k : '' for k in weight_keys}
-        shape = _get_shape(list(values_dict.values())[0])
+        shape = _get_shape(list(values_dict.values())[0])[:-1]
+        # shape = '(' + ','.join(map(str, _get_shape(list(values_dict.values())[0]))) + ')'
         for w1 in weight_keys:
             for w2 in weight_keys:
                 if flattened_dict[w1] == flattened_dict[w2] and w1 != w2:
@@ -302,7 +304,7 @@ def analyze_layers(img, output_dir, mode):
             if colour[w] == '':
                 print(w + '\t' + shape + '\n')
             else:
-                print(colour[w] + w + '\x1b[0m' + '\t' + '\n')
+                print(colour[w] + w + '\x1b[0m' + '\t' + shape.__repr__() + '\n')
     else:
         for k in weight_keys:
             flattened_dict[k] = _flatten_values(values_dict[k])
@@ -317,6 +319,7 @@ def analyze_layers(img, output_dir, mode):
         plt.show()
 
     print('\x1b[6;30;42m' + 'Success!' + '\x1b[0m')
+    print('\n'.join([v.name for v in tf.global_variables()]))
 
 
 if __name__ == '__main__':
