@@ -230,7 +230,7 @@ def _extract_values(img, params=[]):
         # Grab all parameter values.
         if len(params) == 0:
             params = [v.name for v in tf.global_variables()]
-        values_dict = {}
+        values_dict = collections.OrderedDict()
         for param in params:
             # TODO: Optimize?
             values_dict[param] = sess.run([v for v in tf.global_variables() if v.name == params[0]][0])
@@ -300,11 +300,14 @@ def analyze_layers(img, output_dir, mode):
                         colour[w1] = colour[w2]
                     else:
                         colour[w2] = colour[w1]
+        print(weight_keys)
+        output = ''
         for w in weight_keys:
             if colour[w] == '':
-                print(w + '\t' + shape + '\n')
+                output += w + '\t' + shape + '\n'
             else:
-                print(colour[w] + w + '\x1b[0m' + '\t' + shape.__repr__() + '\n')
+                output += colour[w] + w + '\x1b[0m' + '\t' + shape.__repr__() + '\n'
+        print(output)
     else:
         for k in weight_keys:
             flattened_dict[k] = _flatten_values(values_dict[k])
