@@ -22,6 +22,9 @@ patch_size = config.train.in_patch_size
 ni = int(np.sqrt(config.train.batch_size))
 
 
+# We only want Tensorflow to see the first GPU.
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
+
 
 def compute_charbonnier_loss(tensor1, tensor2, is_mean=True):
     epsilon = 1e-6
@@ -95,82 +98,84 @@ def prepare_nn_data(hr_img_list, lr_img_list, idx_img=None):
 
 
 def train():
-    save_dir = "%s/%s_train"%(config.model.result_path,tl.global_flag['mode'])
-    checkpoint_dir = "%s"%(config.model.checkpoint_path)
-    tl.files.exists_or_mkdir(save_dir)
-    tl.files.exists_or_mkdir(checkpoint_dir)
+    with tf.device('/gpu:0'):
+        save_dir = "%s/%s_train"%(config.model.result_path,tl.global_flag['mode'])
+        checkpoint_dir = "%s"%(config.model.checkpoint_path)
+        tl.files.exists_or_mkdir(save_dir)
+        tl.files.exists_or_mkdir(checkpoint_dir)
 
-    ###========================== DEFINE MODEL ============================###
-    t_image = tf.placeholder('float32', [batch_size, patch_size, patch_size, 3], name='t_image_input')
-    t_target_image = tf.placeholder('float32', [batch_size, patch_size*config.model.scale, patch_size*config.model.scale, 3], name='t_target_image')
-    t_target_image_down = tf.image.resize_images(t_target_image, size=[patch_size*2, patch_size*2], method=0, align_corners=False)
+        ###========================== DEFINE MODEL ============================###
+        t_image = tf.placeholder('float32', [batch_size, patch_size, patch_size, 3], name='t_image_input')
+        t_target_image = tf.placeholder('float32', [batch_size, patch_size*config.model.scale, patch_size*config.model.scale, 3], name='t_target_image')
+        t_target_image_down = tf.image.resize_images(t_target_image, size=[patch_size*2, patch_size*2], method=0, align_corners=False)
 
-    net_image2, net_grad2, net_image1, net_grad1 = LapSRN(t_image, is_train=True, reuse=False)
-    net_image2.print_params(False)
+        net_image2, net_grad2, net_image1, net_grad1 = LapSRN(t_image, is_train=True, reuse=False)
+        net_image2.print_params(False)
 
-    ## test inference
-    net_image_test, net_grad_test, _, _ = LapSRN(t_image, is_train=False, reuse=True)
+        ## test inference
+        net_image_test, net_grad_test, _, _ = LapSRN(t_image, is_train=False, reuse=True)
 
-    ###========================== DEFINE TRAIN OPS ==========================###
-    loss2   = compute_charbonnier_loss(net_image2.outputs, t_target_image, is_mean=True)
-    loss1   = compute_charbonnier_loss(net_image1.outputs, t_target_image_down, is_mean=True)
-    g_loss  = loss1 + loss2 * 4
-    g_vars  = tl.layers.get_variables_with_name('LapSRN', True, True)
+        ###========================== DEFINE TRAIN OPS ==========================###
+        loss2   = compute_charbonnier_loss(net_image2.outputs, t_target_image, is_mean=True)
+        loss1   = compute_charbonnier_loss(net_image1.outputs, t_target_image_down, is_mean=True)
+        g_loss  = loss1 + loss2 * 4
+        g_vars  = tl.layers.get_variables_with_name('LapSRN', True, True)
 
-    with tf.variable_scope('learning_rate'):
-        lr_v = tf.Variable(config.train.lr_init, trainable=False)
+        with tf.variable_scope('learning_rate'):
+            lr_v = tf.Variable(config.train.lr_init, trainable=False)
 
-    g_optim = tf.train.AdamOptimizer(lr_v, beta1=config.train.beta1).minimize(g_loss, var_list=g_vars)
+        g_optim = tf.train.AdamOptimizer(lr_v, beta1=config.train.beta1).minimize(g_loss, var_list=g_vars)
 
-    ###========================== RESTORE MODEL =============================###
-    sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
-    tl.layers.initialize_global_variables(sess)
-    tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir+'/params_{}.npz'.format(tl.global_flag['mode']), network=net_image2)
+        ###========================== RESTORE MODEL =============================###
+        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
+        # sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
+        tl.layers.initialize_global_variables(sess)
+        tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir+'/params_{}.npz'.format(tl.global_flag['mode']), network=net_image2)
 
-    ###========================== PRE-LOAD DATA ===========================###
-    train_hr_list,train_lr_list,valid_hr_list,valid_lr_list = load_file_list()
+        ###========================== PRE-LOAD DATA ===========================###
+        train_hr_list,train_lr_list,valid_hr_list,valid_lr_list = load_file_list()
 
-    ###========================== INTERMEDIATE RESULT ===============================###
-    sample_ind = 37
-    sample_input_imgs,sample_output_imgs = prepare_nn_data(valid_hr_list,valid_lr_list,sample_ind)
-    tl.vis.save_images(truncate_imgs_fn(sample_input_imgs),  [ni, ni], save_dir+'/train_sample_input.png')
-    tl.vis.save_images(truncate_imgs_fn(sample_output_imgs), [ni, ni], save_dir+'/train_sample_output.png')
+        ###========================== INTERMEDIATE RESULT ===============================###
+        sample_ind = 37
+        sample_input_imgs,sample_output_imgs = prepare_nn_data(valid_hr_list,valid_lr_list,sample_ind)
+        tl.vis.save_images(truncate_imgs_fn(sample_input_imgs),  [ni, ni], save_dir+'/train_sample_input.png')
+        tl.vis.save_images(truncate_imgs_fn(sample_output_imgs), [ni, ni], save_dir+'/train_sample_output.png')
 
-    ###========================== TRAINING ====================###
-    sess.run(tf.assign(lr_v, config.train.lr_init))
-    print(" ** learning rate: %f" % config.train.lr_init)
+        ###========================== TRAINING ====================###
+        sess.run(tf.assign(lr_v, config.train.lr_init))
+        print(" ** learning rate: %f" % config.train.lr_init)
 
-    for epoch in range(config.train.n_epoch):
-        ## update learning rate
-        if epoch != 0 and (epoch % config.train.decay_iter == 0):
-            lr_decay = config.train.lr_decay ** (epoch // config.train.decay_iter)
-            lr = config.train.lr_init * lr_decay
-            sess.run(tf.assign(lr_v, lr))
-            print(" ** learning rate: %f" % (lr))
+        for epoch in range(config.train.n_epoch):
+            ## update learning rate
+            if epoch != 0 and (epoch % config.train.decay_iter == 0):
+                lr_decay = config.train.lr_decay ** (epoch // config.train.decay_iter)
+                lr = config.train.lr_init * lr_decay
+                sess.run(tf.assign(lr_v, lr))
+                print(" ** learning rate: %f" % (lr))
 
-        epoch_time = time.time()
-        total_g_loss, n_iter = 0, 0
+            epoch_time = time.time()
+            total_g_loss, n_iter = 0, 0
 
-        ## load image data
-        idx_list = np.random.permutation(len(train_hr_list))
-        for idx_file in range(len(idx_list)):
-            step_time = time.time()
-            batch_input_imgs,batch_output_imgs = prepare_nn_data(train_hr_list,train_lr_list,idx_file)
-            errM, _ = sess.run([g_loss, g_optim], {t_image: batch_input_imgs, t_target_image: batch_output_imgs})
-            total_g_loss += errM
-            n_iter += 1
+            ## load image data
+            idx_list = np.random.permutation(len(train_hr_list))
+            for idx_file in range(len(idx_list)):
+                step_time = time.time()
+                batch_input_imgs,batch_output_imgs = prepare_nn_data(train_hr_list,train_lr_list,idx_file)
+                errM, _ = sess.run([g_loss, g_optim], {t_image: batch_input_imgs, t_target_image: batch_output_imgs})
+                total_g_loss += errM
+                n_iter += 1
 
-        print("[*] Epoch: [%2d/%2d] time: %4.4fs, loss: %.8f" % (epoch, config.train.n_epoch, time.time() - epoch_time, total_g_loss/n_iter))
+            print("[*] Epoch: [%2d/%2d] time: %4.4fs, loss: %.8f" % (epoch, config.train.n_epoch, time.time() - epoch_time, total_g_loss/n_iter))
 
-        ## save model and evaluation on sample set
-        if (epoch >= 0):
-            tl.files.save_npz(net_image2.all_params,  name=checkpoint_dir+'/params_{}.npz'.format(tl.global_flag['mode']), sess=sess)
-            saver = tf.trainer.Saver(tf.all_variables())
+            ## save model and evaluation on sample set
+            if (epoch >= 0):
+                tl.files.save_npz(net_image2.all_params,  name=checkpoint_dir+'/params_{}.npz'.format(tl.global_flag['mode']), sess=sess)
+                saver = tf.train.Saver(tf.global_variables())
 
-            if config.train.dump_intermediate_result is True:
-                sample_out, sample_grad_out = sess.run([net_image_test.outputs,net_grad_test.outputs], {t_image: sample_input_imgs})#; print('gen sub-image:', out.shape, out.min(), out.max())
-                tl.vis.save_images(truncate_imgs_fn(sample_out), [ni, ni], save_dir+'/train_predict_%d.png' % epoch)
-                tl.vis.save_images(truncate_imgs_fn(np.abs(sample_grad_out)), [ni, ni], save_dir+'/train_grad_predict_%d.png' % epoch)
+                if config.train.dump_intermediate_result is True:
+                    sample_out, sample_grad_out = sess.run([net_image_test.outputs,net_grad_test.outputs], {t_image: sample_input_imgs})#; print('gen sub-image:', out.shape, out.min(), out.max())
+                    tl.vis.save_images(truncate_imgs_fn(sample_out), [ni, ni], save_dir+'/train_predict_%d.png' % epoch)
+                    tl.vis.save_images(truncate_imgs_fn(np.abs(sample_grad_out)), [ni, ni], save_dir+'/train_grad_predict_%d.png' % epoch)
 
 
 def test(file):
@@ -244,8 +249,8 @@ def _extract_values(img, params=[]):
             # values_dict[param] = sess.run([v for v in tf.global_variables() if v.name == params[0]][0])
             values_dict[param_t.name] = sess.run(param_t)[0]
         # For debugging colouring
-        values_dict['LapSRN/init_conv/W_conv2d:0'] = values_dict['LapSRN/Model_level/conv_D0/W_conv2d:0']
-        values_dict['LapSRN/Model_level/conv_D9/W_conv2d:0'] = values_dict['LapSRN/Model_level/conv_D8/W_conv2d:0']
+        # values_dict['LapSRN/init_conv/W_conv2d:0'] = values_dict['LapSRN/Model_level/conv_D0/W_conv2d:0']
+        # values_dict['LapSRN/Model_level/conv_D9/W_conv2d:0'] = values_dict['LapSRN/Model_level/conv_D8/W_conv2d:0']
         return values_dict
 
 
