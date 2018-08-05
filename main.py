@@ -15,6 +15,7 @@ import tensorlayer as tl
 from model import *
 from utils import *
 from config import *
+import pprint as pp
 
 ###====================== HYPER-PARAMETERS ===========================###
 batch_size = config.train.batch_size
@@ -142,6 +143,10 @@ def train():
         tl.vis.save_images(truncate_imgs_fn(sample_output_imgs), [ni, ni], save_dir+'/train_sample_output.png')
 
         ###========================== TRAINING ====================###
+        writer = tf.summary.FileWriter('Graphs',sess.graph)
+        loss_value = tf.placeholder(tf.float32, shape=())
+        # loss = tf.Variable(0.0)
+        loss_summary = tf.summary.scalar('Loss', loss_value)
         sess.run(tf.assign(lr_v, config.train.lr_init))
         print(" ** learning rate: %f" % config.train.lr_init)
 
@@ -165,7 +170,12 @@ def train():
                 total_g_loss += errM
                 n_iter += 1
 
-            print("[*] Epoch: [%2d/%2d] time: %4.4fs, loss: %.8f" % (epoch, config.train.n_epoch, time.time() - epoch_time, total_g_loss/n_iter))
+            loss = total_g_loss/n_iter
+            print("[*] Epoch: [%2d/%2d] time: %4.4fs, loss: %.8f" % (epoch, config.train.n_epoch, time.time() - epoch_time, loss))
+ 
+            s_ = sess.run(loss_summary, feed_dict={loss_value : loss})
+            writer.add_summary(s_, epoch)
+            writer.flush()
 
             ## save model and evaluation on sample set
             if (epoch >= 0):
@@ -234,7 +244,7 @@ def _extract_values(img, params=[]):
         tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir+'/params_train.npz', network=net_g)
         # Grab all parameter values.
         param_tensors = []
-        if len(params) == 0:
+        if not params:
             param_tensors = [v for v in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)]
         else:
             tfs_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
@@ -255,17 +265,20 @@ def _extract_values(img, params=[]):
 
 
 # TODO: enforce order of image and output file?
-def extract_params(img, output_dir, params):
+def extract_params(img, output_file, params):
     # TODO: Just save?
     """Display and save a values dictionary of specified parameter(s) given a test image,
     output directory and parameter names.
     """
-    values_dict = _extract_values(img, params=params)
-    print(values_dict)
+    if not params:
+        print('Extracting all Parameter Values!')
+    else:
+        print('Extracting Parameter Values for: {params}'.format(params=params))
     print('\n\n\n')
-    print('Extracting Parameter Values for: {params}'.format(params=params))
+    values_dict = _extract_values(img, params=params)
+    pp.pprint(values_dict)
 
-    file = open(output_dir, 'w')
+    file = open(output_file, 'w')
     file.write(str(values_dict))
     file.close()
 
@@ -340,10 +353,11 @@ def analyze_layers(img, output_dir, mode):
     print('\x1b[6;30;42m' + 'Success!' + '\x1b[0m')
 
 
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('-m', '--mode', choices=['train','test', 'extract', 'analyze'],
+    parser.add_argument('-m', '--mode', choices=['train','test', 'extract', 'analyze', 'losses'],
                         default='train', help='select mode')
     # TODO: Do len check for other methods
     parser.add_argument('-f', '--file', nargs='+', help='input file')
@@ -366,5 +380,7 @@ if __name__ == '__main__':
     elif tl.global_flag['mode'] == 'analyze':
         # TODO: Error handling
         analyze_layers(args.file[0], args.file[1], args.output)
+    elif tl.global_flag['mode'] == 'losses':
+        get_losses()
     else:
         raise Exception("Unknow --mode")
