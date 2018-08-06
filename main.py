@@ -4,7 +4,6 @@
 import os, time, random
 import numpy as np
 import scipy
-import pprint as pp
 import copy
 import collections
 import networkx as nx
@@ -272,9 +271,9 @@ def test_dir(test_path, x4_path):
             # tl.vis.save_image(input_image, save_dir+'/'+'in_'+file)
             psnr_dict[file[:-4]] = _psnr(get_imgs_fn(x4_path+'/'+file+'_HR.png'), out_img)
 
-        file = open(save_dir + '/PSNR.csv', 'w')
-        file.write(str(psnr_dict))
-        file.close()
+
+        with open(save_dir + '/output.txt', 'wt') as out:
+            pp.pprint(psnr_dict, stream=out)
         pp.pprint(psnr_dict)
 
 
