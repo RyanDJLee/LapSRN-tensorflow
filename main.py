@@ -16,6 +16,8 @@ from model import *
 from utils import *
 from config import *
 import pprint as pp
+from os import listdir
+from os.path import isfile, join
 
 ###====================== HYPER-PARAMETERS ===========================###
 batch_size = config.train.batch_size
@@ -172,7 +174,7 @@ def train():
 
             loss = total_g_loss/n_iter
             print("[*] Epoch: [%2d/%2d] time: %4.4fs, loss: %.8f" % (epoch, config.train.n_epoch, time.time() - epoch_time, loss))
- 
+
             s_ = sess.run(loss_summary, feed_dict={loss_value : loss})
             writer.add_summary(s_, epoch)
             writer.flush()
@@ -188,6 +190,7 @@ def train():
                     tl.vis.save_images(truncate_imgs_fn(np.abs(sample_grad_out)), [ni, ni], save_dir+'/train_grad_predict_%d.png' % epoch)
 
 
+# TODO: Extend test function to run the model on all test data in BSDS100 and then calculate all the PSNR values per image?
 def test(file):
     try:
         img = get_imgs_fn(file)
@@ -218,6 +221,40 @@ def test(file):
         tl.files.exists_or_mkdir(save_dir)
         tl.vis.save_image(truncate_imgs_fn(out[0,:,:,:]), save_dir+'/test_out.png')
         tl.vis.save_image(input_image, save_dir+'/test_input.png')
+
+
+def test_dir(dir_path):
+    """
+    """
+    checkpoint_dir = config.model.checkpoint_path
+    save_dir = "%s/%s"%(config.model.result_path,tl.global_flag['mode'])
+    # Get files in directory.
+    images = [f for f in listdir(dir_path) if isfile(join(dir_path, f))]
+    for file in images:
+        img = get_imgs_fn(dir_path+'/'+file)
+
+        input_image = normalize_imgs_fn(img)
+
+        size = input_image.shape
+        print('Input size: %s,%s,%s'%(size[0],size[1],size[2]))
+        t_image = tf.placeholder('float32', [None,size[0],size[1],size[2]], name='input_image')
+        net_g, _, _, _ = LapSRN(t_image, is_train=False, reuse=tf.AUTO_REUSE)
+
+        ###========================== RESTORE G =============================###
+        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
+        tl.layers.initialize_global_variables(sess)
+        tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir+'/params_train.npz', network=net_g)
+
+        ###======================= TEST =============================###
+        start_time = time.time()
+        out = sess.run(net_g.outputs, {t_image: [input_image]})
+        print("took: %4.4fs" % (time.time() - start_time))
+
+
+        tl.files.exists_or_mkdir(save_dir)
+        out_img = truncate_imgs_fn(out[0,:,:,:])
+        tl.vis.save_image(out_img, save_dir+'/'+'out_'+file)
+        tl.vis.save_image(input_image, save_dir+'/'+'in_'+file)
 
 
 ###====== Extract pre-trained Network's Weights to CSV ======###
@@ -357,7 +394,7 @@ def analyze_layers(img, output_dir, mode):
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('-m', '--mode', choices=['train','test', 'extract', 'analyze', 'losses'],
+    parser.add_argument('-m', '--mode', choices=['train','test', 'test_dir', 'extract', 'analyze', 'losses'],
                         default='train', help='select mode')
     # TODO: Do len check for other methods
     parser.add_argument('-f', '--file', nargs='+', help='input file')
@@ -373,6 +410,8 @@ if __name__ == '__main__':
         if (args.file is None):
             raise Exception("Please enter input file name for test mode")
         test(args.file)
+    elif tl.global_flag['mode'] == 'test_dir':
+        test_dir(args.file[0])
     # TODO: Shouldn't the network be the same regardless of test image?
     elif tl.global_flag['mode'] == 'extract':
         # TODO: Error handling
