@@ -242,17 +242,18 @@ def test_dir(test_path, x4_path):
         save_dir = "%s/%s"%(config.model.result_path,tl.global_flag['mode'])
         # Get files in directory.
         # TODO: Sort then zip to optimize?
-        images = [f for f in listdir(test_path) if isfile(join(test_path, f))]
+
+        images = [f[:-7] for f in listdir(test_path) if isfile(join(test_path, f))]
 
         for file in images:
-            img = get_imgs_fn(test_path+'/'+file)
+            img = get_imgs_fn(test_path+'/'+file+'_LR.png')
 
             input_image = normalize_imgs_fn(img)
 
             size = input_image.shape
             print('Input size: %s,%s,%s'%(size[0],size[1],size[2]))
             t_image = tf.placeholder('float32', [None,size[0],size[1],size[2]], name='input_image')
-            net_g, _, _, _ = LapSRN(t_image, is_train=False, reuse=None)
+            net_g, _, _, _ = LapSRN(t_image, is_train=False, reuse=tf.AUTO_REUSE)
 
             ###========================== RESTORE G =============================###
             sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
@@ -267,10 +268,9 @@ def test_dir(test_path, x4_path):
 
             tl.files.exists_or_mkdir(save_dir)
             out_img = truncate_imgs_fn(out[0,:,:,:])
-            tl.vis.save_image(out_img, save_dir+'/'+'out_'+file)
+            tl.vis.save_image(out_img, save_dir+'/'+'out_'+file+'.png')
             # tl.vis.save_image(input_image, save_dir+'/'+'in_'+file)
-            pp.pprint(_psnr(get_imgs_fn(x4_path+'/'+file), out_img))
-            psnr_dict[file[:-4]] = _psnr(get_imgs_fn(x4_path+'/'+file), out_img)
+            psnr_dict[file[:-4]] = _psnr(get_imgs_fn(x4_path+'/'+file+'_HR.png'), out_img)
 
         file = open(save_dir + '/PSNR.csv', 'w')
         file.write(str(psnr_dict))
