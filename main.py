@@ -9,6 +9,8 @@ import copy
 import collections
 import networkx as nx
 import matplotlib.pyplot as plt
+import math
+import cv2
 
 import tensorflow as tf
 import tensorlayer as tl
@@ -223,57 +225,56 @@ def test(file):
         tl.vis.save_image(input_image, save_dir+'/test_input.png')
 
 
-def _psnr(target, ref, scale):
-    # RGB image
-    target_data = np.array(target)
-    target_data = target_data[scale:-scale, scale:-scale]
-
-    ref_data = np.array(ref)
-    ref_data = ref_data[scale:-scale, scale:-scale]
-
-    diff = ref_data - target_data
-    diff = diff.flatten('C')
-    rmse = math.sqrt( np.mean(diff ** 2.) )
-    return 20*math.log10(1.0/rmse)
+def _psnr(img1, img2):
+    mse = np.mean( (img1 - img2) ** 2 )
+    if mse == 0:
+        return 100
+    PIXEL_MAX = 255.0
+    return 20 * math.log10(PIXEL_MAX / math.sqrt(mse))
 
 
 def test_dir(test_path, x4_path):
     """
     """
-    psnr_dict = {}
-    checkpoint_dir = config.model.checkpoint_path
-    save_dir = "%s/%s"%(config.model.result_path,tl.global_flag['mode'])
-    # Get files in directory.
-    # TODO: Sort then zip to optimize?
-    images = [f for f in listdir(test_path) if isfile(join(test_path, f))]
-    x4_images = [f for f in listdir(x4_path) if isfile(join(x4_path, f))]
+    with tf.device('/cpu:0'):
+        psnr_dict = {}
+        checkpoint_dir = config.model.checkpoint_path
+        save_dir = "%s/%s"%(config.model.result_path,tl.global_flag['mode'])
+        # Get files in directory.
+        # TODO: Sort then zip to optimize?
+        images = [f for f in listdir(test_path) if isfile(join(test_path, f))]
 
-    for file in images:
-        img = get_imgs_fn(test_path+'/'+file)
+        for file in images:
+            img = get_imgs_fn(test_path+'/'+file)
 
-        input_image = normalize_imgs_fn(img)
+            input_image = normalize_imgs_fn(img)
 
-        size = input_image.shape
-        print('Input size: %s,%s,%s'%(size[0],size[1],size[2]))
-        t_image = tf.placeholder('float32', [None,size[0],size[1],size[2]], name='input_image')
-        net_g, _, _, _ = LapSRN(t_image, is_train=False, reuse=tf.AUTO_REUSE)
+            size = input_image.shape
+            print('Input size: %s,%s,%s'%(size[0],size[1],size[2]))
+            t_image = tf.placeholder('float32', [None,size[0],size[1],size[2]], name='input_image')
+            net_g, _, _, _ = LapSRN(t_image, is_train=False, reuse=None)
 
-        ###========================== RESTORE G =============================###
-        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
-        tl.layers.initialize_global_variables(sess)
-        tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir+'/params_train.npz', network=net_g)
+            ###========================== RESTORE G =============================###
+            sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
+            tl.layers.initialize_global_variables(sess)
+            tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir+'/params_train.npz', network=net_g)
 
-        ###======================= TEST =============================###
-        start_time = time.time()
-        out = sess.run(net_g.outputs, {t_image: [input_image]})
-        print("took: %4.4fs" % (time.time() - start_time))
+            ###======================= TEST =============================###
+            start_time = time.time()
+            out = sess.run(net_g.outputs, {t_image: [input_image]})
+            print("took: %4.4fs" % (time.time() - start_time))
 
 
-        tl.files.exists_or_mkdir(save_dir)
-        out_img = truncate_imgs_fn(out[0,:,:,:])
-        tl.vis.save_image(out_img, save_dir+'/'+'out_'+file)
-        # tl.vis.save_image(input_image, save_dir+'/'+'in_'+file)
-        psnr_dict[file[:-4]] = _psnr(x4_images[x4_images.index(file)], out_img, 0)
+            tl.files.exists_or_mkdir(save_dir)
+            out_img = truncate_imgs_fn(out[0,:,:,:])
+            tl.vis.save_image(out_img, save_dir+'/'+'out_'+file)
+            # tl.vis.save_image(input_image, save_dir+'/'+'in_'+file)
+            psnr_dict[file[:-4]] = pp.pprint(_psnr(get_imgs_fn(x4_path+'/'+file), out_img))
+
+        file = open(save_dir + '/PSNR.csv', 'w')
+        file.write(str(psnr_dict))
+        file.close()
+        pp.pprint(psnr_dict)
 
 
 ###====== Extract pre-trained Network's Weights to CSV ======###
@@ -430,7 +431,7 @@ if __name__ == '__main__':
             raise Exception("Please enter input file name for test mode")
         test(args.file)
     elif tl.global_flag['mode'] == 'test_dir':
-        test_dir(args.file[0])
+        test_dir(args.file[0], args.file[1])
     # TODO: Shouldn't the network be the same regardless of test image?
     elif tl.global_flag['mode'] == 'extract':
         # TODO: Error handling
