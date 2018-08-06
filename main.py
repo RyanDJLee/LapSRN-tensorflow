@@ -414,7 +414,7 @@ def analyze_layers(img, output_dir, mode):
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('-m', '--mode', choices=['train','test', 'test_dir', 'extract', 'analyze', 'losses'],
+    parser.add_argument('-m', '--mode', choices=['psnr', 'train','test', 'test_dir', 'extract', 'analyze', 'losses'],
                         default='train', help='select mode')
     # TODO: Do len check for other methods
     parser.add_argument('-f', '--file', nargs='+', help='input file')
@@ -439,6 +439,9 @@ if __name__ == '__main__':
     elif tl.global_flag['mode'] == 'analyze':
         # TODO: Error handling
         analyze_layers(args.file[0], args.file[1], args.output)
+    elif tl.global_flag['mode'] == 'psnr':
+        print(_psnr(get_imgs_fn(args.file[0]), get_imgs_fn(args.file[1])))
+    # TODO: MOVE FROM TOOLS?
     elif tl.global_flag['mode'] == 'losses':
         get_losses()
     else:
