@@ -223,15 +223,33 @@ def test(file):
         tl.vis.save_image(input_image, save_dir+'/test_input.png')
 
 
-def test_dir(dir_path):
+def _psnr(target, ref, scale):
+    # RGB image
+    target_data = np.array(target)
+    target_data = target_data[scale:-scale, scale:-scale]
+
+    ref_data = np.array(ref)
+    ref_data = ref_data[scale:-scale, scale:-scale]
+
+    diff = ref_data - target_data
+    diff = diff.flatten('C')
+    rmse = math.sqrt( np.mean(diff ** 2.) )
+    return 20*math.log10(1.0/rmse)
+
+
+def test_dir(test_path, x4_path):
     """
     """
+    psnr_dict = {}
     checkpoint_dir = config.model.checkpoint_path
     save_dir = "%s/%s"%(config.model.result_path,tl.global_flag['mode'])
     # Get files in directory.
-    images = [f for f in listdir(dir_path) if isfile(join(dir_path, f))]
+    # TODO: Sort then zip to optimize?
+    images = [f for f in listdir(test_path) if isfile(join(test_path, f))]
+    x4_images = [f for f in listdir(x4_path) if isfile(join(x4_path, f))]
+
     for file in images:
-        img = get_imgs_fn(dir_path+'/'+file)
+        img = get_imgs_fn(test_path+'/'+file)
 
         input_image = normalize_imgs_fn(img)
 
@@ -254,7 +272,8 @@ def test_dir(dir_path):
         tl.files.exists_or_mkdir(save_dir)
         out_img = truncate_imgs_fn(out[0,:,:,:])
         tl.vis.save_image(out_img, save_dir+'/'+'out_'+file)
-        tl.vis.save_image(input_image, save_dir+'/'+'in_'+file)
+        # tl.vis.save_image(input_image, save_dir+'/'+'in_'+file)
+        psnr_dict[file[:-4]] = _psnr(x4_images[x4_images.index(file)], out_img, 0)
 
 
 ###====== Extract pre-trained Network's Weights to CSV ======###
