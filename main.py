@@ -269,7 +269,8 @@ def test_dir(test_path, x4_path):
             out_img = truncate_imgs_fn(out[0,:,:,:])
             tl.vis.save_image(out_img, save_dir+'/'+'out_'+file)
             # tl.vis.save_image(input_image, save_dir+'/'+'in_'+file)
-            psnr_dict[file[:-4]] = pp.pprint(_psnr(get_imgs_fn(x4_path+'/'+file), out_img))
+            pp.pprint(_psnr(get_imgs_fn(x4_path+'/'+file), out_img))
+            psnr_dict[file[:-4]] = _psnr(get_imgs_fn(x4_path+'/'+file), out_img)
 
         file = open(save_dir + '/PSNR.csv', 'w')
         file.write(str(psnr_dict))
