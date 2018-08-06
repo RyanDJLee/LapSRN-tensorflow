@@ -1,9 +1,9 @@
 import matplotlib.pyplot as plt
+import matplotlib.colors as cl
 import numpy as np
 import pandas as pd
 from os import listdir
 from os.path import isfile, join
-
 
 
 def csv_to_graph(dir_path):
@@ -20,9 +20,19 @@ def csv_to_graph(dir_path):
         df[file[:-4]] = pd.read_csv(dir_path+'/'+file)['Value']
     df = pd.DataFrame(df)
 
+    # Use generator instead to save space?
+    # TODO: Need more contrast between bg and lines?
+    # colours = [name for name, _ in cl.cnames.items()]
+    # DARK BACKGROUND
+    # plt.style.use('dark_background')
+    # colours = ['g', 'r', 'c', 'm', 'y', 'k', 'w']
+    # LIGHT BACKGROUND
+    colours = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
+
     # Plot!
-    for file in files:
-        plt.plot('epoch', file[:-4], data=df, marker='o', linewidth=1, markersize=1, color='skyblue', label=file[:-4])
+    for i in range(len(files)):
+        plt.plot('epoch', files[i][:-4], data=df, marker='o', linewidth=1,
+                 markersize=1, color=colours[i], label=files[i][:-4])
     plt.legend()
     plt.show()
 
